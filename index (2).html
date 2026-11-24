@@ -1,0 +1,2088 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>데이트메이트 (DATE MATE) - AI 맞춤형 데이트 플래너</title>
+  <meta name="description" content="별도 설치나 빌드 없이 index.html 단일 파일로 바로 실행하고 GitHub·Vercel에 즉시 배포할 수 있는 전 연령 안전 데이트 코스 플래너입니다.">
+  <meta property="og:title" content="데이트메이트 (DATE MATE) - 맞춤형 데이트 플래너">
+  <meta property="og:description" content="원하는 지역과 조건을 선택하면 실제 장소 기반 데이트 코스와 이동 동선, 예상 비용, 지도 링크를 한 번에 정리해 드립니다.">
+  <meta property="og:type" content="website">
+
+  <!-- CDN Fonts & JSZip (외부 라이브러리는 CDN 방식만 사용) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer=""></script>
+
+  <style>
+    :root {
+      --bg-canvas: #faf9f7;
+      --bg-surface: #ffffff;
+      --bg-subtle: #f5f3ef;
+      --text-primary: #1c1917;
+      --text-secondary: #57534e;
+      --text-muted: #78716c;
+      --border-hairline: #e7e5e4;
+      --border-strong: #d6d3d1;
+      --accent: #e11d48;
+      --accent-hover: #be123c;
+      --accent-soft: #fff1f2;
+      --warning-text: #92400e;
+      --radius-lg: 12px;
+      --radius-md: 8px;
+      --font-sans: 'Pretendard', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-family: var(--font-sans);
+      color: var(--text-primary);
+      background-color: var(--bg-canvas);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    ::selection {
+      background-color: #ffe4e6;
+      color: #9f1239;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    input {
+      font-family: inherit;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .mono-tabular {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Top Bar Contract: 3 zones separated by gap */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background-color: rgba(250, 249, 247, 0.94);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border-hairline);
+    }
+
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 32px;
+      height: 60px;
+    }
+
+    .brand-wordmark {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .nav-links a {
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: color 150ms ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--text-primary);
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 9px 16px;
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-md);
+      background-color: var(--accent);
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), border-color 150ms ease;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background-color: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    .btn-dark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border: 1px solid var(--text-primary);
+      border-radius: var(--radius-md);
+      background-color: var(--text-primary);
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background-color 150ms ease, border-color 150ms ease;
+    }
+
+    .btn-dark:hover:not(:disabled) {
+      background-color: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 18px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: border-color 150ms ease, color 150ms ease;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent-hover);
+    }
+
+    /* Hero & Search Section */
+    .hero {
+      padding-top: 48px;
+    }
+
+    .kicker {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-hover);
+    }
+
+    .hero-title {
+      margin: 10px 0 0;
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      text-wrap: balance;
+      color: var(--text-primary);
+    }
+
+    .hero-subtitle {
+      margin: 14px 0 0;
+      max-width: 660px;
+      font-size: 16px;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+
+    .planner-card {
+      margin-top: 28px;
+      padding: 28px;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-lg);
+    }
+
+    .search-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .input-wrap {
+      position: relative;
+      flex: 1;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .region-input {
+      width: 100%;
+      height: 48px;
+      padding: 0 16px 0 42px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-size: 15px;
+      font-weight: 500;
+      outline: none;
+      transition: border-color 150ms ease, background-color 150ms ease;
+    }
+
+    .region-input:focus {
+      border-color: var(--accent);
+      background-color: var(--bg-surface);
+    }
+
+    .submit-btn {
+      height: 48px;
+      padding: 0 24px;
+      font-size: 15px;
+    }
+
+    .quick-regions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .quick-label {
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .quick-btn {
+      padding: 2px 0;
+      border: none;
+      background: none;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color 150ms ease;
+    }
+
+    .quick-btn:hover,
+    .quick-btn.active {
+      color: var(--accent-hover);
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      font-weight: 600;
+    }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 24px;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border-hairline);
+    }
+
+    .filter-label {
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .filter-btn {
+      padding: 7px 12px;
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      background-color: var(--bg-canvas);
+      color: var(--text-secondary);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+    }
+
+    .filter-btn:hover {
+      border-color: var(--border-strong);
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+    }
+
+    .filter-btn.active {
+      border-color: var(--accent);
+      background-color: var(--accent);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .theme-block {
+      margin-top: 20px;
+    }
+
+    .extra-block {
+      margin-top: 20px;
+    }
+
+    .extra-input {
+      width: 100%;
+      height: 42px;
+      padding: 0 14px;
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 150ms ease;
+    }
+
+    .extra-input:focus {
+      border-color: var(--accent);
+    }
+
+    /* Notice Banner */
+    .notice-box {
+      margin-top: 20px;
+      padding: 14px 18px;
+      border: 1px solid #fde68a;
+      border-radius: var(--radius-md);
+      background-color: #fffbeb;
+      color: var(--warning-text);
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Results Section */
+    .results-section {
+      margin-top: 52px;
+    }
+
+    .course-header {
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+
+    .meta-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .meta-num {
+      font-weight: 700;
+      color: var(--accent-hover);
+    }
+
+    .course-title {
+      margin: 10px 0 0;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      text-wrap: balance;
+    }
+
+    .surface-card {
+      margin-top: 24px;
+      padding: 28px;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-lg);
+    }
+
+    .card-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .card-count {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    .schedule-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .schedule-row {
+      display: grid;
+      grid-template-columns: 180px 240px 1fr;
+      gap: 16px;
+      align-items: baseline;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--bg-subtle);
+    }
+
+    .schedule-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .schedule-time {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--accent-hover);
+    }
+
+    .schedule-index {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .schedule-place {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .schedule-summary {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    /* Place Cards */
+    .places-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    .place-card {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .place-visual {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background-color: var(--bg-subtle);
+      border-right: 1px solid var(--border-hairline);
+    }
+
+    .place-svg-box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      min-height: 210px;
+      flex: 1;
+    }
+
+    .place-visual-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      background-color: var(--bg-surface);
+      border-top: 1px solid var(--border-hairline);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .photo-link {
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      transition: color 150ms ease;
+    }
+
+    .photo-link:hover {
+      color: var(--accent-hover);
+    }
+
+    .place-body {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 28px;
+    }
+
+    .place-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .place-name-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .place-step {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--accent-hover);
+    }
+
+    .place-name {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .place-cat {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .place-address {
+      margin: 8px 0 0;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .place-note {
+      margin: 8px 0 0;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--warning-text);
+    }
+
+    .place-reason {
+      margin: 18px 0 0;
+      padding-top: 16px;
+      border-top: 1px solid var(--bg-subtle);
+      font-size: 14.5px;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+
+    .place-reason strong {
+      color: var(--text-primary);
+    }
+
+    .place-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin: 20px 0 0;
+      padding-top: 16px;
+      border-top: 1px solid var(--bg-subtle);
+    }
+
+    .metric-dt {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .metric-dd {
+      margin: 4px 0 0;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .map-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--bg-subtle);
+      font-size: 12.5px;
+    }
+
+    .map-label {
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .map-link {
+      font-weight: 700;
+      text-underline-offset: 4px;
+      white-space: nowrap;
+    }
+
+    .map-link:hover {
+      text-decoration: underline;
+    }
+
+    .map-naver { color: #047857; }
+    .map-kakao { color: #92400e; }
+    .map-google { color: #1d4ed8; }
+
+    /* Cost & Transit 2-col */
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    .two-col .surface-card {
+      margin-top: 0;
+    }
+
+    .total-cost {
+      margin: 14px 0 0;
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--accent-hover);
+    }
+
+    .cost-desc {
+      margin: 10px 0 0;
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .transit-list {
+      margin: 14px 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .transit-item {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .transit-num {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-hover);
+    }
+
+    .overall-reason {
+      margin: 14px 0 0;
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .disclaimer {
+      margin: 20px 0 0;
+      padding-top: 16px;
+      border-top: 1px solid var(--bg-subtle);
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    /* GitHub & Vercel Zip Export Section */
+    .github-section {
+      margin-top: 72px;
+      padding-top: 56px;
+      border-top: 1px solid var(--border-hairline);
+    }
+
+    .github-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .github-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .github-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 24px;
+      margin-top: 28px;
+    }
+
+    .github-grid .surface-card {
+      margin-top: 0;
+    }
+
+    .file-list {
+      margin: 16px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .file-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--bg-subtle);
+      font-size: 13.5px;
+    }
+
+    .file-row:last-child {
+      border-bottom: none;
+    }
+
+    .file-path {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .file-meta {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    .check-list {
+      margin: 20px 0 0;
+      padding: 16px;
+      background-color: var(--bg-canvas);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+
+    .guide-steps {
+      margin: 16px 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .guide-steps strong {
+      color: var(--text-primary);
+    }
+
+    .code-box-wrap {
+      margin-top: 20px;
+    }
+
+    .code-box-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .copy-btn {
+      border: none;
+      background: none;
+      padding: 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .copy-btn:hover {
+      color: var(--accent-hover);
+    }
+
+    .code-pre {
+      margin: 0;
+      padding: 14px;
+      background-color: var(--bg-canvas);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text-primary);
+      overflow-x: auto;
+    }
+
+    .footer {
+      margin-top: 72px;
+      padding: 28px 0;
+      border-top: 1px solid var(--border-hairline);
+      background-color: var(--bg-surface);
+    }
+
+    .footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    .footer-link {
+      border: none;
+      background: none;
+      padding: 0;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      cursor: pointer;
+    }
+
+    .footer-link:hover {
+      color: var(--accent-hover);
+    }
+
+    @media (max-width: 900px) {
+      .nav-links {
+        display: none;
+      }
+      .filters-grid,
+      .two-col,
+      .github-grid,
+      .place-card {
+        grid-template-columns: 1fr;
+      }
+      .place-visual {
+        border-right: none;
+        border-bottom: 1px solid var(--border-hairline);
+      }
+      .schedule-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+      .place-metrics {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .search-row {
+        flex-direction: column;
+      }
+      .planner-card,
+      .surface-card,
+      .place-body {
+        padding: 20px;
+      }
+    }
+  </style>
+<script src="/_aistudio-iframe.js?v=29045eb3"></script><script src="https://cdn.jsdelivr.net/npm/html2canvas-pro@2.0.4"></script><style>.aistudio-hover-highlight { box-shadow: inset 0 0 0 0.5px white, inset 0 0 0 1.5px rgba(128,128,128,0.6) !important; }.aistudio-active-highlight { outline: 2px solid #87a9ff !important; outline-offset: -2px !important; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.3), inset 0 0 0 0.5px rgba(0,0,0,0.3) !important; }.aistudio-generating-blur { filter: blur(5px) grayscale(100%) brightness(28%) !important; transition: filter 0.3s ease; }#aistudio-focus-mode-tag { position: absolute; display: none; align-items: center; gap: 4px; background: #87a9ff; border-radius: 12px; z-index: 10000; padding: 8px; color: #32302c; font-family: Inter, sans-serif; font-size: 14px; font-style: normal; font-weight: 500; line-height: 21px; pointer-events: none; }#aistudio-hover-mode-tag { position: absolute; display: none; align-items: center; gap: 4px; background: rgba(128,128,128,0.6); border-radius: 12px; z-index: 10000; padding: 8px; color: white; font-family: Inter, sans-serif; font-size: 14px; font-style: normal; font-weight: 500; line-height: 21px; pointer-events: none; }.aistudio-img-icon { display: none; vertical-align: middle; pointer-events: auto; cursor: pointer; }.aistudio-img-icon.visible { display: inline-flex; }#aistudio-focus-mode-tag .aistudio-img-icon { position: relative; width: 26px; height: 26px; background: #32302c; border-radius: 6px; margin: -4px -4px -4px 0; }#aistudio-focus-mode-tag .aistudio-img-icon::before { content: ""; position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; background-color: white; -webkit-mask-image: url("https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/edit_fix_auto/default/24px.svg"); -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; mask-image: url("https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/edit_fix_auto/default/24px.svg"); mask-size: contain; mask-repeat: no-repeat; }#aistudio-hover-mode-tag .aistudio-img-icon { position: relative; width: 18px; height: 18px; margin-left: 4px; }#aistudio-hover-mode-tag .aistudio-img-icon::before { content: ""; position: absolute; top: 0; left: 0; width: 18px; height: 18px; background-color: white; -webkit-mask-image: url("https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/edit_fix_auto/default/24px.svg"); -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; mask-image: url("https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/edit_fix_auto/default/24px.svg"); mask-size: contain; mask-repeat: no-repeat; }#aistudio-focus-mode-tag .aistudio-img-icon:hover, #aistudio-hover-mode-tag .aistudio-img-icon:hover { background: #424242 !important; }#aistudio-focus-mode-tag .aistudio-img-icon:active, #aistudio-hover-mode-tag .aistudio-img-icon:active { background: #393f51 !important; }</style>
+</head>
+<body>
+<!-- Top Bar Contract: 3 zones -->
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="#planner" class="brand-wordmark">데이트메이트</a>
+
+      <nav class="nav-links" aria-label="주요 메뉴">
+        <a href="#planner">코스 플래너</a>
+        <a href="#course-result">추천 일정</a>
+        <a href="#github-package">GitHub 패키지</a>
+        <a href="#deploy-guide">Vercel 배포</a>
+      </nav>
+
+      <button type="button" id="topZipBtn" class="btn-primary">
+        GitHub .zip 다운로드
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Hero & Planner -->
+    <section id="planner" class="hero">
+      <p class="kicker">단일 index.html · 전 연령 안전 데이트 코스 플래너</p>
+      <h1 class="hero-title">오늘 어디로 데이트 갈까?</h1>
+      <p class="hero-subtitle">
+        원하는 지역과 조건만 고르면 동선·예상 비용·영업시간·지도 링크까지 한 번에 코스로 정리해 드립니다.
+        별도 서버나 빌드 없이 이 <strong>index.html</strong> 파일 하나만으로 즉시 실행됩니다.
+      </p>
+
+      <form id="plannerForm" class="planner-card">
+        <div class="search-row">
+          <div class="input-wrap">
+            <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-6-5.686-6-10a6 6 0 1112 0c0 4.314-6 10-6 10z"></path>
+              <circle cx="12" cy="11" r="2.2"></circle>
+            </svg>
+            <input id="regionInput" type="text" required="" value="목포" placeholder="지역을 입력하세요 (예: 목포, 서울 강남, 부산 해운대, 제주도, 전주 한옥마을, 경주, 강릉, 여수)" class="region-input">
+          </div>
+          <button type="submit" class="btn-primary submit-btn">코스 추천받기</button>
+        </div>
+
+        <div class="quick-regions">
+          <span class="quick-label">추천 지역:</span>
+          <button type="button" class="quick-btn active" data-region="목포">목포</button>
+          <button type="button" class="quick-btn" data-region="서울 강남">서울 강남</button>
+          <button type="button" class="quick-btn" data-region="부산 해운대">부산 해운대</button>
+          <button type="button" class="quick-btn" data-region="제주도">제주도</button>
+          <button type="button" class="quick-btn" data-region="전주 한옥마을">전주 한옥마을</button>
+          <button type="button" class="quick-btn" data-region="경주">경주</button>
+          <button type="button" class="quick-btn" data-region="강릉">강릉</button>
+          <button type="button" class="quick-btn" data-region="여수">여수</button>
+        </div>
+
+        <div class="filters-grid">
+          <div>
+            <p class="filter-label">연령층 (안전 맞춤 필터)</p>
+            <div class="filter-group" data-filter-group="age">
+              <button type="button" class="filter-btn active" data-value="전 연령 안전 코스">전 연령(청소년 안전)</button>
+              <button type="button" class="filter-btn" data-value="청소년">청소년</button>
+              <button type="button" class="filter-btn" data-value="대학생">대학생</button>
+              <button type="button" class="filter-btn" data-value="직장인·성인">직장인·성인</button>
+            </div>
+          </div>
+
+          <div>
+            <p class="filter-label">예산 선택</p>
+            <div class="filter-group" data-filter-group="budget">
+              <button type="button" class="filter-btn active" data-value="상관없음">전체</button>
+              <button type="button" class="filter-btn" data-value="저예산 코스">저예산</button>
+              <button type="button" class="filter-btn" data-value="보통 예산 코스">보통 예산</button>
+              <button type="button" class="filter-btn" data-value="특별한 날을 위한 코스">특별한 날</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="theme-block">
+          <p class="filter-label">데이트 테마</p>
+          <div class="filter-group" data-filter-group="theme">
+            <button type="button" class="filter-btn active" data-value="전체 테마 균형">자동 추천</button>
+            <button type="button" class="filter-btn" data-value="감성적인 데이트">감성적인</button>
+            <button type="button" class="filter-btn" data-value="맛집 중심 데이트">맛집 중심</button>
+            <button type="button" class="filter-btn" data-value="자연과 함께하는 데이트">자연과 함께</button>
+            <button type="button" class="filter-btn" data-value="실내 데이트">실내 데이트</button>
+            <button type="button" class="filter-btn" data-value="액티비티 데이트">액티비티</button>
+            <button type="button" class="filter-btn" data-value="조용하고 여유로운 데이트">조용하고 여유로운</button>
+            <button type="button" class="filter-btn" data-value="이색 체험 데이트">이색 체험</button>
+          </div>
+        </div>
+
+        <div class="extra-block">
+          <label for="extraInput" class="filter-label" style="display:block;">추가 조건 (선택)</label>
+          <input id="extraInput" type="text" placeholder="예: 비 오는 날, 뚜벅이 이동, 사진 찍기 좋은 곳, 오후 2시 시작 등" class="extra-input">
+        </div>
+      </form>
+
+      <div id="customRegionNotice" class="notice-box hidden"></div>
+    </section>
+
+    <!-- Course Result Section (01 ~ 08) -->
+    <section id="course-result" class="results-section">
+      <div class="course-header">
+        <div id="courseMeta" class="meta-line"></div>
+        <h2 id="courseName" class="course-title"></h2>
+      </div>
+
+      <div class="surface-card">
+        <div class="card-head">
+          <h3 class="card-title">02. 추천 코스 전체 일정</h3>
+          <span id="scheduleCount" class="card-count mono-tabular"></span>
+        </div>
+        <ol id="scheduleList" class="schedule-list"></ol>
+      </div>
+
+      <div id="placesContainer" class="places-stack"></div>
+
+      <div class="two-col">
+        <div class="surface-card">
+          <h3 class="card-title">06. 전체 예상 비용 (참고용)</h3>
+          <p id="totalCost" class="total-cost mono-tabular"></p>
+          <p id="costBreakdown" class="cost-desc"></p>
+        </div>
+
+        <div class="surface-card">
+          <h3 class="card-title">07. 장소 간 이동 방법과 이동 시간</h3>
+          <ul id="transitList" class="transit-list"></ul>
+        </div>
+      </div>
+
+      <div class="surface-card">
+        <h3 class="card-title">08. 전체 코스 추천 이유</h3>
+        <p id="overallReason" class="overall-reason"></p>
+        <p class="disclaimer">
+          본 코스의 영업시간·입장료·이동 시간은 참고용이며 기상 상황이나 매장 사정에 따라 변동될 수 있으니 방문 전 지도 링크를 통해 최신 운영 여부를 확인해 주세요.
+        </p>
+      </div>
+    </section>
+
+    <!-- GitHub + Vercel .zip Export Section -->
+    <section id="github-package" class="github-section">
+      <div class="github-header">
+        <div>
+          <p class="kicker">Zero-Framework · Zero-Build Static Package</p>
+          <h2 class="hero-title" style="font-size: clamp(1.6rem, 3vw, 2.2rem); margin-top: 8px;">
+            GitHub 업로드 &amp; Vercel 즉시 배포용 .zip
+          </h2>
+          <p class="hero-subtitle" style="font-size: 14.5px; margin-top: 10px;">
+            React, Vite, npm, package.json, build 폴더 없이 <strong>index.html 단일 파일</strong>과 <strong>README.md</strong>만으로 패키징합니다.
+            브라우저에서 <code>index.html</code>을 더블 클릭해도 동일하게 실행됩니다.
+          </p>
+        </div>
+
+        <div class="github-actions">
+          <button type="button" id="mainZipBtn" class="btn-dark">
+            date-mate-github.zip 다운로드
+          </button>
+          <button type="button" id="rawHtmlBtn" class="btn-secondary">
+            index.html 단독 저장
+          </button>
+        </div>
+      </div>
+
+      <div id="exportStatus" class="notice-box hidden"></div>
+
+      <div class="github-grid">
+        <div class="surface-card">
+          <div class="card-head">
+            <h3 class="card-title">압축 파일 내부 구성</h3>
+            <span class="card-count mono-tabular">총 2개 파일 · 프레임워크 0</span>
+          </div>
+
+          <ul class="file-list">
+            <li class="file-row">
+              <span class="file-path mono-tabular">date-mate/index.html</span>
+              <span class="file-meta">HTML · CSS · Vanilla JS 통합 단일 파일</span>
+            </li>
+            <li class="file-row">
+              <span class="file-path mono-tabular">date-mate/README.md</span>
+              <span class="file-meta">GitHub · Vercel 무설정 정적 배포 안내</span>
+            </li>
+          </ul>
+
+          <div class="check-list">
+            <strong>포함 규칙 확인:</strong><br>
+            · React, Vue, Svelte, Next.js, Vite 미사용<br>
+            · npm, build, dist, package.json, tsx 파일 제외<br>
+            · 외부 리소스는 Google Fonts / Pretendard / JSZip CDN만 사용<br>
+            · 로컬 탐색기에서 <code>index.html</code> 더블 클릭 시 즉시 실행 가능
+          </div>
+        </div>
+
+        <div id="deploy-guide" class="surface-card">
+          <div class="card-head">
+            <h3 class="card-title">GitHub → Vercel 3단계 배포</h3>
+            <span class="card-count">Zero Config</span>
+          </div>
+
+          <ol class="guide-steps">
+            <li>
+              <span class="mono-tabular" style="color: var(--accent-hover); font-weight: 700;">01.</span>
+              <strong>압축 해제:</strong> 내려받은 <code>date-mate-github.zip</code>의 압축을 풀어 <code>index.html</code> 파일을 확인합니다.
+            </li>
+            <li>
+              <span class="mono-tabular" style="color: var(--accent-hover); font-weight: 700;">02.</span>
+              <strong>GitHub 업로드:</strong> 새 저장소(Repository)에 <code>index.html</code>과 <code>README.md</code>를 드래그 업로드하거나 Git으로 푸시합니다.
+            </li>
+            <li>
+              <span class="mono-tabular" style="color: var(--accent-hover); font-weight: 700;">03.</span>
+              <strong>Vercel 즉시 배포:</strong> Vercel에서 해당 GitHub 저장소를 Import 후 별도 빌드 명령 없이 바로 <strong>Deploy</strong>를 누르면 완료됩니다.
+            </li>
+          </ol>
+
+          <div class="code-box-wrap">
+            <div class="code-box-head">
+              <span>Git 업로드 명령어 (선택)</span>
+              <button type="button" id="copyGitBtn" class="copy-btn">명령어 복사</button>
+            </div>
+            <pre id="gitCommandPre" class="code-pre mono-tabular">git init
+git add index.html README.md
+git commit -m "Initial commit: DATE MATE single-file app"
+git branch -M main
+git remote add origin https://github.com/&lt;USERNAME&gt;/&lt;REPO_NAME&gt;.git
+git push -u origin main</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span>데이트메이트 (DATE MATE) · 순수 단일 HTML 애플리케이션</span>
+      <button type="button" id="footerZipBtn" class="footer-link">
+        GitHub 업로드용 .zip 내려받기
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      // 초기 본문 스냅샷 (동적 렌더링 전 깨끗한 DOM 상태 보관)
+      const INITIAL_BODY_HTML = document.body.innerHTML;
+
+      const state = {
+        region: '목포',
+        age: '전 연령 안전 코스',
+        budget: '상관없음',
+        theme: '전체 테마 균형',
+        extra: ''
+      };
+
+      const README_CONTENT = [
+        '# 데이트메이트 (DATE MATE) — 단일 파일 AI 데이트 플래너',
+        '',
+        '프레임워크(React, Vue, Vite 등), `npm`, `package.json`, 빌드 과정 없이 **`index.html` 단일 파일**만으로 동작하는 맞춤형 데이트 코스 플래너입니다.',
+        '',
+        '## 특징',
+        '',
+        '- **Zero-Framework & Zero-Build**: 순수 HTML5 + CSS3 + Vanilla JavaScript로 작성되어 별도 설치나 빌드 없이 즉시 실행됩니다.',
+        '- **로컬 바로 실행**: `index.html` 파일을 브라우저로 더블 클릭(`file://`)해도 모든 기능이 정상 동작합니다.',
+        '- **즉시 Vercel 배포**: GitHub 저장소에 그대로 업로드한 뒤 Vercel에서 Import 하면 별도 빌드 설정 없이 바로 배포됩니다.',
+        '',
+        '## Vercel 배포 방법',
+        '',
+        '1. 이 저장소를 GitHub에 업로드합니다.',
+        '2. [Vercel](https://vercel.com) 대시보드에서 **Add New Project**를 클릭하고 GitHub 저장소를 선택합니다.',
+        '3. Build Command / Output Directory 설정 없이 **Deploy** 버튼을 누르면 즉시 배포가 완료됩니다.'
+      ].join('\n');
+
+      // 지역별 검증된 큐레이션 코스 데이터
+      const CURATED_COURSES = {
+        '목포': {
+          courseName: '목포 근대 감성과 바다 전망을 잇는 전 연령 안심 데이트',
+          schedule: [
+            { time: '13:00 ~ 14:15', place: '목포근대역사관 1관', summary: '붉은 벽돌 근대 건축물 관람 및 포토존 산책' },
+            { time: '14:30 ~ 15:30', place: '코롬방제과점', summary: '목포 대표 베이커리에서 바게트와 음료로 티타임' },
+            { time: '15:50 ~ 17:40', place: '목포해상케이블카 (북항 승강장)', summary: '유달산과 다도해 바다를 건너며 노을 감상' }
+          ],
+          places: [
+            {
+              name: '목포근대역사관 1관',
+              category: '문화·역사 관광지',
+              address: '전라남도 목포시 영산로29번길 6',
+              reason: '1900년 완공된 서구식 붉은 벽돌 건축물로 외관이 아름다워 사진 찍기 좋으며, 전시와 실내 관람이 가능해 날씨와 연령에 관계없이 안전하게 즐길 수 있습니다.',
+              duration: '약 1시간 15분',
+              cost: '어른 2,000원 / 청소년 1,000원',
+              hours: '09:00 ~ 18:00 (월요일 휴관)',
+              statusNote: '매주 월요일 정기 휴관 확인 필요',
+              artType: 'architecture'
+            },
+            {
+              name: '코롬방제과점',
+              category: '로컬 베이커리·카페',
+              address: '전라남도 목포시 영산로75번길 7',
+              reason: '오랜 역사를 지닌 목포 대표 베이커리로 2층 취식 공간이 있어 잠시 쉬어가며 크림치즈바게트·새우바게트 등 지역 명물 디저트를 즐기기에 좋습니다.',
+              duration: '약 1시간',
+              cost: '1인 약 8,000원 ~ 13,000원',
+              hours: '매일 08:00 ~ 21:00',
+              statusNote: '주말 대기 및 품절 메뉴 여부 확인 권장',
+              artType: 'cafe'
+            },
+            {
+              name: '목포해상케이블카 (북항 승강장)',
+              category: '전망·액티비티',
+              address: '전라남도 목포시 해양대학로 240',
+              reason: '유달산과 바다 위를 가로지르는 3.23km 노선으로 목포 시내와 다도해 전경을 한눈에 담을 수 있어 데이트의 하이라이트로 손색이 없습니다.',
+              duration: '약 1시간 40분',
+              cost: '일반캐빈 왕복 대인 24,000원 / 소인 18,000원',
+              hours: '09:00 ~ 19:00 (금~일·하계 연장 운영)',
+              statusNote: '강풍·악천후 시 운행 변동 가능',
+              artType: 'coast'
+            }
+          ],
+          totalCost: '1인 약 34,000원 ~ 40,000원 (2인 약 7만~8만 원 내외)',
+          costBreakdown: '입장료(1,000~2,000원) + 베이커리·음료(약 10,000원) + 해상케이블카 왕복(24,000원) 기준이며 시내 이동비는 별도입니다.',
+          transit: [
+            '목포근대역사관 1관 → 코롬방제과점: 원도심 평지 도보 약 10~12분',
+            '코롬방제과점 → 목포해상케이블카 북항 승강장: 택시 약 10~15분 / 시내버스 약 20~25분'
+          ],
+          overallReason: '원도심 근대거리에서 가볍게 걸으며 문화 체험과 디저트를 즐긴 뒤, 오후 늦게 해상케이블카를 타고 바다 위 노을로 마무리하는 동선입니다. 이동 피로도가 적고 유흥 요소가 없어 전 연령이 편안하게 즐길 수 있습니다.'
+        },
+        '서울 강남': {
+          courseName: '코엑스 실내 문화 산책과 도심 공원이 어우러진 강남 데이트',
+          schedule: [
+            { time: '13:00 ~ 14:30', place: '별마당 도서관 (스타필드 코엑스몰)', summary: '대형 서가 관람 및 실내 포토 스팟 산책' },
+            { time: '14:40 ~ 16:00', place: '코엑스몰 아쿠아리움 또는 아트·디저트 카페', summary: '계절·날씨 영향 없는 쾌적한 실내 체험 및 티타임' },
+            { time: '16:20 ~ 17:50', place: '선정릉 (선릉과 정릉)', summary: '도심 속 울창한 숲길 산책로에서 여유로운 마무리' }
+          ],
+          places: [
+            {
+              name: '별마당 도서관 (스타필드 코엑스몰)',
+              category: '실내 복합문화공간',
+              address: '서울특별시 강남구 영동대로 513 스타필드 코엑스몰 B1',
+              reason: '지하철 2호선 삼성역·9호선 봉은사역과 바로 연결되어 접근성이 뛰어나며, 무료 개방 서가와 시즌별 전시가 있어 첫 코스로 부담 없이 만나기 좋습니다.',
+              duration: '약 1시간 30분',
+              cost: '입장 무료 (카페 음료 선택 시 5,000원~8,000원)',
+              hours: '매일 10:30 ~ 22:00',
+              statusNote: '주말 오후에는 좌석이 혼잡할 수 있음',
+              artType: 'architecture'
+            },
+            {
+              name: '코엑스몰 디저트 라운지 & 몰 산책',
+              category: '실내 카페·식사',
+              address: '서울특별시 강남구 영동대로 513 코엑스몰 일대',
+              reason: '다양한 가격대의 식사와 디저트 매장이 한 공간에 모여 있어 예산과 취향에 맞춰 메뉴를 고르기 쉽고 비 오는 날에도 쾌적하게 이동할 수 있습니다.',
+              duration: '약 1시간 20분',
+              cost: '1인 약 15,000원 ~ 25,000원',
+              hours: '매장별 상이 (보통 10:30 ~ 22:00)',
+              statusNote: '방문 전 선호 매장 영업시간 확인 권장',
+              artType: 'cafe'
+            },
+            {
+              name: '선정릉 (선릉과 정릉)',
+              category: '세계유산·도심 숲 산책',
+              address: '서울특별시 강남구 선릉로100길 1',
+              reason: '빌딩 숲 한가운데 자리한 고즈넉한 왕릉 산책로로, 도심 소음을 벗어나 조용하게 대화를 나누며 걷기 좋은 전 연령 안전 코스입니다.',
+              duration: '약 1시간 30분',
+              cost: '일반 1,000원 (만 24세 이하 청소년 무료)',
+              hours: '화~일 06:00 ~ 21:00 (계절별 변동, 월요일 휴관)',
+              statusNote: '매주 월요일 휴관 및 동절기 마감 시간 확인 필요',
+              artType: 'coast'
+            }
+          ],
+          totalCost: '1인 약 18,000원 ~ 35,000원 (2인 약 4만~7만 원 내외)',
+          costBreakdown: '별마당 도서관(무료) + 코엑스몰 식사·카페(약 20,000원) + 선정릉 입장료(1,000원, 청소년 무료) 기준입니다.',
+          transit: [
+            '별마당 도서관 → 코엑스몰 카페 구역: 코엑스몰 내부 도보 3~5분 (실내 연결)',
+            '코엑스몰 → 선정릉: 도보 약 15~18분 또는 지하철 9호선 봉은사역→선정릉역(1정거장)'
+          ],
+          overallReason: '실내 복합문화공간에서 날씨 걱정 없이 시간을 보낸 뒤 가까운 도심 숲 산책로로 이어지는 균형 잡힌 동선입니다. 대중교통 접근성이 뛰어나 뚜벅이 데이트에 특히 적합합니다.'
+        },
+        '부산 해운대': {
+          courseName: '바다 열차와 해변 산책로를 따라 걷는 해운대 힐링 데이트',
+          schedule: [
+            { time: '13:00 ~ 14:30', place: '해운대 블루라인파크 (미포 정거장)', summary: '해변열차를 타고 청사포까지 바다 풍경 감상' },
+            { time: '14:40 ~ 16:00', place: '청사포 오션뷰 카페 거리', summary: '등대와 바다를 바라보며 여유로운 디저트 타임' },
+            { time: '16:20 ~ 18:00', place: '동백섬 & 누리마루 APEC하우스 산책로', summary: '소나무 숲길과 해운대 야경 포인트 산책' }
+          ],
+          places: [
+            {
+              name: '해운대 블루라인파크 (미포 정거장)',
+              category: '해안 관광열차',
+              address: '부산광역시 해운대구 달맞이길62번길 13',
+              reason: '미포에서 청사포·송정까지 바다 바로 옆 철길을 따라 달리는 해변열차로, 탁 트인 동해와 남해 경계를 편안하게 감상할 수 있습니다.',
+              duration: '약 1시간 30분 (탑승·포토존 포함)',
+              cost: '해변열차 1회권 7,000원 / 2회권 12,000원',
+              hours: '09:30 ~ 19:30 (계절별 막차 시간 상이)',
+              statusNote: '주말·성수기에는 사전 온라인 예매 권장',
+              artType: 'coast'
+            },
+            {
+              name: '청사포 오션뷰 카페 거리',
+              category: '해변 카페·디저트',
+              address: '부산광역시 해운대구 청사포로 일대',
+              reason: '쌍둥이 등대와 어촌 마을의 아기자기한 분위기가 어우러진 카페 거리로, 창가에서 바다를 보며 조용히 쉬어가기 좋습니다.',
+              duration: '약 1시간 20분',
+              cost: '1인 약 8,000원 ~ 14,000원',
+              hours: '매장별 상이 (보통 10:00 ~ 21:00)',
+              statusNote: '방문할 카페의 정기 휴무일 확인 권장',
+              artType: 'cafe'
+            },
+            {
+              name: '동백섬 해안산책로 & 누리마루 APEC하우스',
+              category: '해안 공원·전시관',
+              address: '부산광역시 해운대구 동백로 116',
+              reason: '평탄한 데크 산책로를 따라 광안대교와 해운대 마천루 풍경을 함께 감상할 수 있어 해 질 녘 산책 코스로 인기가 높습니다.',
+              duration: '약 1시간 30분',
+              cost: '입장 무료',
+              hours: '산책로 상시 개방 / 누리마루 09:00 ~ 18:00 (월요일 휴관)',
+              statusNote: '누리마루 내부 관람은 월요일 휴관 여부 확인',
+              artType: 'architecture'
+            }
+          ],
+          totalCost: '1인 약 20,000원 ~ 30,000원 (2인 약 4만~6만 원 내외)',
+          costBreakdown: '블루라인파크 해변열차(7,000~12,000원) + 청사포 카페(약 11,000원) + 동백섬 산책(무료) 기준입니다.',
+          transit: [
+            '미포 정거장 → 청사포: 해변열차 약 15분 (바다 경관 감상 구간)',
+            '청사포 → 동백섬 입구: 해변열차 복귀 후 해운대해수욕장 도보 또는 택시 약 12~15분'
+          ],
+          overallReason: '해운대의 바다 정취를 걷고, 타고, 바라보는 세 가지 방식으로 경험하는 코스입니다. 경사가 완만하고 동선이 직선적이라 계절에 관계없이 만족도가 높습니다.'
+        },
+        '제주도': {
+          courseName: '제주의 숲과 돌담, 바다를 천천히 음미하는 제주 시내·동쪽 코스',
+          schedule: [
+            { time: '11:30 ~ 13:00', place: '제주 동문재래시장 & 로컬 맛집', summary: '다양한 제주 로컬 먹거리로 가벼운 점심 식사' },
+            { time: '13:40 ~ 15:20', place: '함덕해수욕장 & 서우봉 산책로', summary: '에메랄드빛 바다와 유채·잔디 언덕 산책' },
+            { time: '15:40 ~ 17:30', place: '제주 북촌 돌하르방공원 또는 조천 카페거리', summary: '제주 돌담 정원 산책 및 감성 티타임' }
+          ],
+          places: [
+            {
+              name: '제주 동문재래시장',
+              category: '로컬 푸드·시장',
+              address: '제주특별자치도 제주시 관덕로14길 20',
+              reason: '제주 공항과 가까워 접근이 쉽고, 한라봉 주스·김밥·오메기떡 등 다양한 제주 간식을 부담 없는 예산으로 함께 고르는 재미가 있습니다.',
+              duration: '약 1시간 30분',
+              cost: '1인 약 10,000원 ~ 18,000원',
+              hours: '매일 08:00 ~ 21:00 (점포별 상이)',
+              statusNote: '일부 점포 조기 마감 가능',
+              artType: 'cafe'
+            },
+            {
+              name: '함덕해수욕장 & 서우봉 둘레길',
+              category: '해변·자연 명소',
+              address: '제주특별자치도 제주시 조천읍 조함해안로 525',
+              reason: '수심이 얕고 맑은 에메랄드빛 바다와 서우봉 완만한 산책로가 이어져 있어 사진 촬영과 여유로운 산책을 동시에 즐길 수 있습니다.',
+              duration: '약 1시간 40분',
+              cost: '입장 무료',
+              hours: '상시 개방',
+              statusNote: '바람이 강한 날에는 겉옷 지참 권장',
+              artType: 'coast'
+            },
+            {
+              name: '조천·함덕 해안 베이커리 카페',
+              category: '바다 전망 카페',
+              address: '제주특별자치도 제주시 조천읍 조함해안로 일대',
+              reason: '함덕 바다를 정면으로 바라보며 제주 녹차·감귤 디저트와 음료를 즐길 수 있어 여행 피로를 풀기에 좋습니다.',
+              duration: '약 1시간 30분',
+              cost: '1인 약 8,000원 ~ 14,000원',
+              hours: '보통 09:00 ~ 20:00',
+              statusNote: '매장별 휴무일 지도 사전 확인 권장',
+              artType: 'architecture'
+            }
+          ],
+          totalCost: '1인 약 20,000원 ~ 35,000원 (렌터카·버스 교통비 별도)',
+          costBreakdown: '동문시장 식사·간식(약 14,000원) + 함덕해수욕장·서우봉(무료) + 해안 카페(약 11,000원) 기준입니다.',
+          transit: [
+            '동문재래시장 → 함덕해수욕장: 차량 약 25~30분 / 급행·간선버스 약 40분',
+            '함덕해수욕장 → 조천 해안 카페: 도보 5~10분 이내'
+          ],
+          overallReason: '공항과 가까운 제주시권에서 시작해 대중교통으로도 이동 가능한 함덕 해변까지 이어지는 효율적인 반나절 코스입니다.'
+        },
+        '전주 한옥마을': {
+          courseName: '한옥 지붕과 전동성당을 따라 걷는 전주 감성 산책',
+          schedule: [
+            { time: '12:30 ~ 14:00', place: '전동성당 & 경기전', summary: '근대 성당 건축과 고즈넉한 대나무숲 산책' },
+            { time: '14:15 ~ 15:40', place: '전주 한옥마을 골목 & 한옥 찻집', summary: '전통 다과와 차를 즐기며 여유로운 티타임' },
+            { time: '16:00 ~ 17:30', place: '오목대 전망대 & 자만벽화마을', summary: '한옥마을 기와 지붕 전경 조망 및 사진 산책' }
+          ],
+          places: [
+            {
+              name: '전주 경기전 & 전동성당',
+              category: '역사 문화유산',
+              address: '전라북도 전주시 완산구 태조로 44',
+              reason: '태조 이성계의 어진을 모신 경기전 안쪽 대나무숲과 맞은편 전동성당의 붉은 벽돌 건축이 어우러져 전주에서 가장 대표적이고 안전한 포토 명소입니다.',
+              duration: '약 1시간 30분',
+              cost: '경기전 어른 3,000원 / 청소년 2,000원 (전동성당 외부 무료)',
+              hours: '경기전 09:00 ~ 18:00 (계절별 연장)',
+              statusNote: '전동성당 미사 시간 중 내부 입장 제한 가능',
+              artType: 'architecture'
+            },
+            {
+              name: '전주 한옥마을 전통 찻집 & 공방 거리',
+              category: '전통 카페·체험',
+              address: '전라북도 전주시 완산구 기린대로 99 일대',
+              reason: '한옥 마당을 바라보며 쌍화차·오미자차와 전통 떡을 맛보거나 가죽·도자기 등 가벼운 실내 공예 체험을 즐길 수 있습니다.',
+              duration: '약 1시간 25분',
+              cost: '1인 약 9,000원 ~ 16,000원',
+              hours: '보통 10:00 ~ 21:00',
+              statusNote: '체험 공방은 주말 사전 예약 확인 권장',
+              artType: 'cafe'
+            },
+            {
+              name: '오목대 전망대 & 자만벽화마을',
+              category: '전망·도보 산책',
+              address: '전라북도 전주시 완산구 기린대로 55',
+              reason: '완만한 나무 계단을 오르면 한옥마을의 검은 기와 지붕 물결이 한눈에 펼쳐지며, 이어지는 자만벽화마을까지 걸어 내려오며 데이트를 마무리할 수 있습니다.',
+              duration: '약 1시간 30분',
+              cost: '입장 무료',
+              hours: '상시 개방',
+              statusNote: '주민 거주 구역이므로 조용한 관람 에티켓 권장',
+              artType: 'coast'
+            }
+          ],
+          totalCost: '1인 약 15,000원 ~ 25,000원 (2인 약 3만~5만 원 내외)',
+          costBreakdown: '경기전 입장료(2,000~3,000원) + 한옥 찻집·간식(약 12,000원) + 오목대(무료) 기준입니다.',
+          transit: [
+            '전동성당·경기전 → 한옥마을 전통 찻집: 도보 5분 이내',
+            '한옥마을 중심 → 오목대 & 자만벽화마을: 도보 약 10~12분'
+          ],
+          overallReason: '차량 이동 없이 전 구간 도보로 이어지는 콤팩트한 코스입니다. 입장료와 먹거리 예산이 합리적이라 청소년·대학생 뚜벅이 커플에게 특히 좋습니다.'
+        },
+        '경주': {
+          courseName: '고분 능선과 야경이 이어지는 경주 황리단길·동궁과 월지 코스',
+          schedule: [
+            { time: '14:00 ~ 15:30', place: '대릉원 & 천마총', summary: '푸른 고분 사이 산책로와 신라 유물 관람' },
+            { time: '15:40 ~ 17:10', place: '황리단길 한옥 카페 & 소품샵', summary: '골목 감성 소품샵 구경과 티타임' },
+            { time: '17:30 ~ 19:00', place: '첨성대 & 동궁과 월지', summary: '노을부터 야경까지 이어지는 신라 왕경 산책' }
+          ],
+          places: [
+            {
+              name: '경주 대릉원 (천마총)',
+              category: '사적지 공원',
+              address: '경상북도 경주시 황남동 31-1',
+              reason: '완만한 잔디 능선이 펼쳐진 넓은 공원으로 목련나무 포토존과 실내 천마총 전시관이 있어 사계절 산책하기 좋습니다.',
+              duration: '약 1시간 30분',
+              cost: '대릉원 무료 (천마총 어른 3,000원 / 청소년 2,000원)',
+              hours: '09:00 ~ 22:00 (천마총 입장 마감 21:30)',
+              statusNote: '대릉원은 상시 개방에 가깝게 늦은 시간까지 산책 가능',
+              artType: 'coast'
+            },
+            {
+              name: '황리단길 한옥 카페 거리',
+              category: '카페·소품샵·간식',
+              address: '경상북도 경주시 포석로 1080 일대',
+              reason: '한옥을 개조한 카페, 책방, 사진관, 기념품 가게가 밀집해 있어 구경하는 재미가 크고 도보 동선이 편리합니다.',
+              duration: '약 1시간 30분',
+              cost: '1인 약 10,000원 ~ 18,000원',
+              hours: '매장별 상이 (보통 11:00 ~ 21:00)',
+              statusNote: '주말 골목 혼잡도 확인 권장',
+              artType: 'cafe'
+            },
+            {
+              name: '첨성대 & 동궁과 월지',
+              category: '역사 야경 명소',
+              address: '경상북도 경주시 원화로 102',
+              reason: '해 질 녘 첨성대 주변 꽃밭과 정원을 거닌 뒤, 동궁과 월지 연못에 비치는 누각 야경으로 인상적인 마무리를 할 수 있습니다.',
+              duration: '약 1시간 30분',
+              cost: '첨성대 무료 / 동궁과 월지 어른 3,000원 / 청소년 2,000원',
+              hours: '동궁과 월지 09:00 ~ 22:00 (입장 마감 21:30)',
+              statusNote: '일몰 직후 방문 시 가장 아름다운 반영 감상 가능',
+              artType: 'architecture'
+            }
+          ],
+          totalCost: '1인 약 16,000원 ~ 26,000원 (2인 약 3만~5만 원 내외)',
+          costBreakdown: '천마총(2,000~3,000원) + 황리단길 카페·간식(약 13,000원) + 동궁과 월지(2,000~3,000원) 기준입니다.',
+          transit: [
+            '대릉원 → 황리단길: 후문·정문 도보 3분 바로 연결',
+            '황리단길 → 첨성대 → 동궁과 월지: 평지 공원 산책로 도보 약 15~20분'
+          ],
+          overallReason: '경주의 대표 유적지와 트렌디한 한옥 카페거리가 모두 도보권에 모여 있어 이동 부담 없이 낮과 밤의 매력을 모두 느낄 수 있습니다.'
+        },
+        '강릉': {
+          courseName: '바다 향기와 커피 거리가 어우러진 강릉 안목·경포 코스',
+          schedule: [
+            { time: '13:00 ~ 14:20', place: '아르떼뮤지엄 강릉 또는 초당순두부 마을', summary: '실내 미디어아트 전시 관람 또는 로컬 식사' },
+            { time: '14:40 ~ 16:10', place: '경포호 산책로 & 경포해변', summary: '호수와 동해를 나란히 따라 걷는 평지 산책' },
+            { time: '16:30 ~ 18:00', place: '안목해변 강릉커피거리', summary: '바다 앞 로스터리 카페에서 디저트와 커피 타임' }
+          ],
+          places: [
+            {
+              name: '아르떼뮤지엄 강릉',
+              category: '실내 미디어아트 전시',
+              address: '강원특별자치도 강릉시 난설헌로 131',
+              reason: '날씨와 계절에 구애받지 않는 몰입형 실내 전시 공간으로, 빛과 소리 연출이 뛰어나 사진 촬영과 감성 데이트에 잘 어울립니다.',
+              duration: '약 1시간 20분',
+              cost: '성인 17,000원 / 청소년 13,000원 (티바 선택 별도)',
+              hours: '매일 10:00 ~ 20:00 (입장 마감 19:00)',
+              statusNote: '주말 대기 줄이 있을 수 있어 사전 예매 권장',
+              artType: 'architecture'
+            },
+            {
+              name: '경포호 산책로 & 경포해변',
+              category: '자연·호수·해변 산책',
+              address: '강원특별자치도 강릉시 창해로 514 일대',
+              reason: '경포호 둘레길과 백사장이 바로 인접해 있어 자전거 대여나 도보 산책으로 시원한 동해 바람을 느끼기 좋습니다.',
+              duration: '약 1시간 30분',
+              cost: '입장 무료 (자전거 대여 시 별도)',
+              hours: '상시 개방',
+              statusNote: '일교차가 큰 해안 지역이므로 겉옷 준비 권장',
+              artType: 'coast'
+            },
+            {
+              name: '안목해변 강릉커피거리',
+              category: '해변 로스터리 카페',
+              address: '강원특별자치도 강릉시 창해로14번길 20-1 일대',
+              reason: '백사장을 마주 보고 줄지어 선 다양한 커피 전문점에서 바다를 보며 여유롭게 대화를 나누며 하루를 마무리할 수 있습니다.',
+              duration: '약 1시간 30분',
+              cost: '1인 약 7,000원 ~ 13,000원',
+              hours: '매장별 상이 (보통 09:00 ~ 22:00)',
+              statusNote: '루프탑 좌석은 기상에 따라 이용 제한 가능',
+              artType: 'cafe'
+            }
+          ],
+          totalCost: '1인 약 25,000원 ~ 35,000원 (2인 약 5만~7만 원 내외)',
+          costBreakdown: '아르떼뮤지엄(13,000~17,000원) + 경포해변(무료) + 안목 커피거리(약 10,000원) 기준입니다.',
+          transit: [
+            '아르떼뮤지엄 → 경포호·해변: 도보 약 10~15분 또는 차량 5분',
+            '경포해변 → 안목해변 커피거리: 해안도로 차량·택시 약 10~12분 / 시내버스 약 20분'
+          ],
+          overallReason: '강릉의 강점인 실내 문화 전시, 호수·해변 산책, 그리고 대표 커피 거리를 깔끔하게 연결한 코스입니다.'
+        },
+        '여수': {
+          courseName: '바다 풍경과 해상 파노라마를 만나는 여수 오동도·케이블카 코스',
+          schedule: [
+            { time: '13:30 ~ 15:00', place: '오동도 & 동백열차 산책', summary: '방파제와 숲길을 걸으며 다도해 전망 감상' },
+            { time: '15:20 ~ 16:40', place: '여수해상케이블카 (자산→돌산)', summary: '바다 위를 건너며 여수항과 거북선대교 조망' },
+            { time: '17:00 ~ 18:30', place: '돌산공원 & 고소동 벽화마을·카페', summary: '여수 바다 노을 감상 및 티타임' }
+          ],
+          places: [
+            {
+              name: '여수 오동도',
+              category: '해상 섬 공원',
+              address: '전라남도 여수시 오동도로 222',
+              reason: '육지와 방파제로 연결되어 있어 도보나 동백열차로 편하게 들어갈 수 있으며, 울창한 숲과 해안 절벽 전망대가 잘 정비되어 있습니다.',
+              duration: '약 1시간 30분',
+              cost: '입장 무료 (동백열차 편도 1,000원)',
+              hours: '상시 개방 (동백열차 주간 운행)',
+              statusNote: '동백열차 점심·마감 시간 현장 확인 필요',
+              artType: 'coast'
+            },
+            {
+              name: '여수해상케이블카',
+              category: '전망·액티비티',
+              address: '전라남도 여수시 돌산읍 돌산로 3600-1',
+              reason: '자산공원과 돌산공원을 잇는 해상 노선으로 여수 바다와 도심 야경을 한눈에 담을 수 있는 대표 명소입니다.',
+              duration: '약 1시간 20분',
+              cost: '일반캐빈 왕복 대인 17,000원 / 소인 12,000원',
+              hours: '매일 09:30 ~ 21:30 (주말·계절 변동)',
+              statusNote: '강풍 등 기상 악화 시 운행 일시 중단 가능',
+              artType: 'architecture'
+            },
+            {
+              name: '고소동 1004벽화마을 & 해안 전망 카페',
+              category: '벽화 골목·카페',
+              address: '전라남도 여수시 고소3길 32 일대',
+              reason: '언덕 골목 사이로 내려다보이는 여수 바다와 돌산대교 풍경이 아기자기하며, 주변 전망 카페에서 가볍게 쉬어가기 좋습니다.',
+              duration: '약 1시간 30분',
+              cost: '벽화마을 무료 (카페 선택 시 7,000원~12,000원)',
+              hours: '상시 개방 (카페별 상이)',
+              statusNote: '주민 생활 공간이므로 소음 주의 권장',
+              artType: 'cafe'
+            }
+          ],
+          totalCost: '1인 약 26,000원 ~ 34,000원 (2인 약 5만~7만 원 내외)',
+          costBreakdown: '오동도·동백열차(약 2,000원) + 해상케이블카 왕복(17,000원) + 전망 카페(약 10,000원) 기준입니다.',
+          transit: [
+            '오동도 입구 → 자산공원 케이블카 승강장: 도보 약 10~15분',
+            '돌산공원 → 고소동 벽화마을: 케이블카 복귀 후 도보 약 15분 또는 택시 약 7분'
+          ],
+          overallReason: '여수의 핵심 바다 명소들이 반경 2km 안팎에 모여 있어 이동 시간이 짧고 풍경 변화가 풍부한 전 연령 추천 코스입니다.'
+        }
+      };
+
+      const REGION_ALIASES = [
+        { key: '목포', keywords: ['목포'] },
+        { key: '서울 강남', keywords: ['강남', '코엑스', '삼성역', '선정릉'] },
+        { key: '부산 해운대', keywords: ['해운대', '부산', '청사포', '동백섬'] },
+        { key: '제주도', keywords: ['제주', '함덕', '조천'] },
+        { key: '전주 한옥마을', keywords: ['전주', '한옥마을'] },
+        { key: '경주', keywords: ['경주', '황리단길', '첨성대'] },
+        { key: '강릉', keywords: ['강릉', '안목', '경포'] },
+        { key: '여수', keywords: ['여수', '오동도'] }
+      ];
+
+      function matchCuratedRegion(input) {
+        const clean = input.trim();
+        if (CURATED_COURSES[clean]) return clean;
+        for (const item of REGION_ALIASES) {
+          if (item.keywords.some((kw) => clean.includes(kw))) {
+            return item.key;
+          }
+        }
+        return null;
+      }
+
+      function buildCustomRegionCourse(region) {
+        return {
+          isCustomTemplate: true,
+          courseName: region + ' 맞춤 동선 탐색 데이트 플래너',
+          schedule: [
+            { time: '13:30 ~ 15:00', place: region + ' 대표 공원·문화 명소', summary: '도심 산책 또는 실내 전시관으로 가벼운 시작' },
+            { time: '15:15 ~ 16:30', place: region + ' 로컬 베이커리·감성 카페', summary: '대표 디저트와 음료로 여유로운 티타임' },
+            { time: '16:50 ~ 18:30', place: region + ' 전망 포인트·저녁 식사 거리', summary: '노을 감상 후 지역 대표 맛집에서 식사 마무리' }
+          ],
+          places: [
+            {
+              name: region + ' 문화·산책 명소',
+              category: '공원 · 박물관 · 랜드마크',
+              address: region + ' 중심 권역 (하단 지도 링크에서 실시간 위치 확인)',
+              reason: '지역의 분위기를 가장 안전하고 쾌적하게 느낄 수 있는 공공 산책지 또는 문화 전시 공간을 첫 코스로 배치했습니다.',
+              duration: '약 1시간 30분',
+              cost: '무료 ~ 5,000원 내외 (시설별 상이)',
+              hours: '지도 링크에서 최신 운영시간 확인',
+              statusNote: '방문 전 휴관일 확인 권장',
+              artType: 'architecture'
+            },
+            {
+              name: region + ' 추천 카페·디저트',
+              category: '로컬 카페 · 베이커리',
+              address: region + ' 주요 카페 거리 (하단 지도 링크에서 평점·영업 확인)',
+              reason: '첫 번째 장소에서 도보 또는 짧은 대중교통으로 이동 가능한 디저트 공간에서 편안하게 대화 시간을 가질 수 있습니다.',
+              duration: '약 1시간 15분',
+              cost: '1인 약 7,000원 ~ 13,000원',
+              hours: '지도 링크에서 영업시간 확인',
+              statusNote: '주말 웨이팅 여부 확인 권장',
+              artType: 'cafe'
+            },
+            {
+              name: region + ' 전망·저녁 맛집 코스',
+              category: '전망 명소 · 식사',
+              address: region + ' 일대 (하단 지도 링크로 즉시 탐색)',
+              reason: '주류 위주 유흥 시설을 제외하고 전 연령이 안전하게 즐길 수 있는 식사 및 야경 산책 스팟으로 하루를 마무리합니다.',
+              duration: '약 1시간 40분',
+              cost: '1인 약 12,000원 ~ 22,000원',
+              hours: '지도 링크에서 라스트오더 시간 확인',
+              statusNote: '브레이크타임 여부 확인 권장',
+              artType: 'coast'
+            }
+          ],
+          totalCost: '1인 약 20,000원 ~ 40,000원 (선택 매장·메뉴 기준 참고용)',
+          costBreakdown: '문화·산책(무료~5,000원) + 카페·디저트(약 10,000원) + 식사(약 15,000원~20,000원) 기준으로 예상됩니다.',
+          transit: [
+            '1코스 → 2코스: 중심 권역 내 도보 10~15분 또는 시내버스·택시 이동 권장',
+            '2코스 → 3코스: 저녁 시간대 이동 편의를 위해 지도 길찾기로 최단 동선 확인'
+          ],
+          overallReason: region + ' 지역의 실제 장소 정보가 임의로 꾸며지지 않도록, 검증된 동선 구조와 실시간 네이버 지도·카카오맵·구글 지도 검색 링크를 연결해 구성했습니다.'
+        };
+      }
+
+      function applyUserModifiers(baseCourse, regionLabel) {
+        const cloned = JSON.parse(JSON.stringify(baseCourse));
+        const notes = [];
+
+        if (state.age === '청소년' || state.age === '전 연령 안전 코스') {
+          notes.push('청소년 포함 전 연령이 안전하게 이용할 수 있도록 주류·성인 전용 업소를 배제한 구성입니다.');
+        } else if (state.age === '대학생') {
+          notes.push('대중교통 접근성과 합리적인 가성비 동선을 우선 반영했습니다.');
+        } else {
+          notes.push('여유로운 대화와 완성도 높은 동선 흐름을 중심으로 구성했습니다.');
+        }
+
+        if (state.budget === '저예산 코스') {
+          notes.push('무료 개방 공원·전시와 가벼운 티타임 중심으로 부담을 낮춘 예산 가이드입니다.');
+        } else if (state.budget === '특별한 날을 위한 코스') {
+          notes.push('기념일에 맞춰 전망 스팟·체험 콘텐츠와 디저트 업그레이드를 권장합니다.');
+        }
+
+        if (state.theme && state.theme !== '전체 테마 균형') {
+          notes.push('선택하신 [' + state.theme + '] 분위기에 맞춰 각 스팟의 관람·사진 포인트를 우선 활용해 보세요.');
+        }
+
+        const extra = state.extra.trim();
+        if (extra) {
+          notes.push('추가 조건("' + extra + '")을 반영해 실내 대피 공간 및 보행 동선 확인 안내를 함께 참고하세요.');
+        }
+
+        cloned.overallReason = cloned.overallReason + ' ' + notes.join(' ');
+        if (cloned.places && cloned.places[0] && extra) {
+          cloned.places[0].statusNote = (cloned.places[0].statusNote ? cloned.places[0].statusNote + ' · ' : '') + '조건 반영: ' + extra;
+        }
+        cloned._regionLabel = regionLabel;
+        return cloned;
+      }
+
+      function getSpotIllustrationSvg(artType) {
+        if (artType === 'cafe') {
+          return '<svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+            '<rect x="16" y="18" width="128" height="84" rx="8" fill="#FFFFFF" stroke="#E7E5E4" stroke-width="1.5"/>' +
+            '<path d="M52 54H98V74C98 82.8366 90.8366 90 82 90H68C59.1634 90 52 82.8366 52 74V54Z" fill="#FFF1F2" stroke="#E11D48" stroke-width="1.8"/>' +
+            '<path d="M98 60H106C110.418 60 114 63.5817 114 68C114 72.4183 110.418 76 106 76H98" stroke="#E11D48" stroke-width="1.8"/>' +
+            '<path d="M64 40C64 36 68 34 68 30" stroke="#78716C" stroke-width="1.6" stroke-linecap="round"/>' +
+            '<path d="M76 40C76 36 80 34 80 30" stroke="#78716C" stroke-width="1.6" stroke-linecap="round"/>' +
+            '<path d="M88 40C88 36 92 34 92 30" stroke="#78716C" stroke-width="1.6" stroke-linecap="round"/>' +
+            '<line x1="42" y1="90" x2="112" y2="90" stroke="#1C1917" stroke-width="1.8" stroke-linecap="round"/>' +
+            '</svg>';
+        }
+        if (artType === 'coast') {
+          return '<svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+            '<rect x="16" y="18" width="128" height="84" rx="8" fill="#FFFFFF" stroke="#E7E5E4" stroke-width="1.5"/>' +
+            '<circle cx="114" cy="40" r="10" fill="#FFE4E6" stroke="#E11D48" stroke-width="1.6"/>' +
+            '<path d="M24 72L52 46L78 68L102 52L136 74" stroke="#1C1917" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' +
+            '<path d="M24 84C36 80 48 88 60 84C72 80 84 88 96 84C108 80 120 88 136 84" stroke="#E11D48" stroke-width="1.8" stroke-linecap="round"/>' +
+            '<path d="M24 92C38 89 50 95 64 92C78 89 90 95 104 92C118 89 128 94 136 92" stroke="#A8A29E" stroke-width="1.4" stroke-linecap="round"/>' +
+            '</svg>';
+        }
+        return '<svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+          '<rect x="16" y="18" width="128" height="84" rx="8" fill="#FFFFFF" stroke="#E7E5E4" stroke-width="1.5"/>' +
+          '<path d="M36 90V50L80 32L124 50V90" fill="#FFF1F2" stroke="#1C1917" stroke-width="1.8" stroke-linejoin="round"/>' +
+          '<rect x="52" y="58" width="16" height="18" rx="2" fill="#FFFFFF" stroke="#E11D48" stroke-width="1.6"/>' +
+          '<rect x="92" y="58" width="16" height="18" rx="2" fill="#FFFFFF" stroke="#E11D48" stroke-width="1.6"/>' +
+          '<path d="M72 90V68H88V90" fill="#FFFFFF" stroke="#1C1917" stroke-width="1.8" stroke-linejoin="round"/>' +
+          '<line x1="28" y1="90" x2="132" y2="90" stroke="#1C1917" stroke-width="1.8" stroke-linecap="round"/>' +
+          '</svg>';
+      }
+
+      function escapeHtml(value) {
+        if (value === null || value === undefined) return '';
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function renderCourse(rawCourse, regionInput) {
+        const course = applyUserModifiers(rawCourse, regionInput);
+        const noticeEl = document.getElementById('customRegionNotice');
+
+        if (course.isCustomTemplate) {
+          noticeEl.innerHTML =
+            '<strong>맞춤 탐색 안내:</strong> "' +
+            escapeHtml(regionInput) +
+            '" 지역은 단일 HTML 정적 모드에서 임의의 가짜 장소명을 생성하지 않기 위해, 검증된 동선 구조와 실시간 네이버 지도·카카오맵·구글 지도 검색 링크를 연결해 드렸습니다.';
+          noticeEl.classList.remove('hidden');
+        } else {
+          noticeEl.classList.add('hidden');
+        }
+
+        // 01. 코스 메타 및 제목
+        const metaParts = [
+          '<span class="meta-num mono-tabular">01</span>',
+          '<span aria-hidden="true">·</span>',
+          '<span>' + escapeHtml(regionInput) + '</span>',
+          '<span aria-hidden="true">·</span>',
+          '<span>' + escapeHtml(state.age) + '</span>',
+          '<span aria-hidden="true">·</span>',
+          '<span>' + escapeHtml(state.budget) + '</span>',
+          '<span aria-hidden="true">·</span>',
+          '<span>' + escapeHtml(state.theme) + '</span>'
+        ];
+        if (!course.isCustomTemplate) {
+          metaParts.push('<span aria-hidden="true">·</span><span>검증된 추천 코스</span>');
+        }
+        document.getElementById('courseMeta').innerHTML = metaParts.join('');
+        document.getElementById('courseName').textContent = course.courseName;
+
+        // 02. 전체 일정
+        const schedule = course.schedule || [];
+        document.getElementById('scheduleCount').textContent = '총 ' + schedule.length + '개 스팟';
+        document.getElementById('scheduleList').innerHTML = schedule
+          .map(function (item, idx) {
+            return (
+              '<li class="schedule-row">' +
+              '<div class="schedule-time mono-tabular">' +
+              '<span class="schedule-index">0' + (idx + 1) + '</span>' +
+              '<span>' + escapeHtml(item.time) + '</span>' +
+              '</div>' +
+              '<div class="schedule-place">' + escapeHtml(item.place) + '</div>' +
+              '<div class="schedule-summary">' + escapeHtml(item.summary) + '</div>' +
+              '</li>'
+            );
+          })
+          .join('');
+
+        // 03 ~ 05. 방문 장소별 카드
+        const places = course.places || [];
+        document.getElementById('placesContainer').innerHTML = places
+          .map(function (place, idx) {
+            const stepNum = String(idx + 3).padStart(2, '0');
+            const queryTerm = course.isCustomTemplate
+              ? regionInput + ' ' + place.category.split('·')[0].trim()
+              : regionInput + ' ' + place.name;
+            const q = encodeURIComponent(queryTerm);
+            const naverUrl = 'https://map.naver.com/p/search/' + q;
+            const kakaoUrl = 'https://map.kakao.com/link/search/' + q;
+            const googleUrl = 'https://www.google.com/maps/search/?api=1&query=' + q;
+            const photoUrl = 'https://www.google.com/search?tbm=isch&q=' + q;
+
+            return (
+              '<article class="place-card">' +
+              '<div class="place-visual">' +
+              '<div class="place-svg-box">' + getSpotIllustrationSvg(place.artType) + '</div>' +
+              '<div class="place-visual-bar">' +
+              '<span class="mono-tabular">0' + (idx + 1) + ' · ' + escapeHtml(place.category) + '</span>' +
+              '<a href="' + photoUrl + '" target="_blank" rel="noopener noreferrer" class="photo-link">실제 사진 검색 ↗</a>' +
+              '</div>' +
+              '</div>' +
+              '<div class="place-body">' +
+              '<div>' +
+              '<div class="place-top">' +
+              '<div class="place-name-wrap">' +
+              '<span class="place-step mono-tabular">' + stepNum + '</span>' +
+              '<h4 class="place-name">' + escapeHtml(place.name) + '</h4>' +
+              '</div>' +
+              '<span class="place-cat">' + escapeHtml(place.category) + '</span>' +
+              '</div>' +
+              '<p class="place-address">위치: ' + escapeHtml(place.address) + '</p>' +
+              (place.statusNote ? '<p class="place-note">참고: ' + escapeHtml(place.statusNote) + '</p>' : '') +
+              '<p class="place-reason"><strong>추천 이유 — </strong>' + escapeHtml(place.reason) + '</p>' +
+              '</div>' +
+              '<div>' +
+              '<dl class="place-metrics">' +
+              '<div><dt class="metric-dt">예상 이용 시간</dt><dd class="metric-dd mono-tabular">' + escapeHtml(place.duration) + '</dd></div>' +
+              '<div><dt class="metric-dt">예상 비용</dt><dd class="metric-dd mono-tabular">' + escapeHtml(place.cost) + '</dd></div>' +
+              '<div><dt class="metric-dt">영업시간</dt><dd class="metric-dd mono-tabular">' + escapeHtml(place.hours) + '</dd></div>' +
+              '</dl>' +
+              '<div class="map-links">' +
+              '<span class="map-label">지도 · 길찾기</span>' +
+              '<a href="' + naverUrl + '" target="_blank" rel="noopener noreferrer" class="map-link map-naver">네이버 지도 ↗</a>' +
+              '<a href="' + kakaoUrl + '" target="_blank" rel="noopener noreferrer" class="map-link map-kakao">카카오맵 ↗</a>' +
+              '<a href="' + googleUrl + '" target="_blank" rel="noopener noreferrer" class="map-link map-google">구글 지도 ↗</a>' +
+              '</div>' +
+              '</div>' +
+              '</div>' +
+              '</article>'
+            );
+          })
+          .join('');
+
+        // 06. 예상 비용 & 07. 이동 방법
+        document.getElementById('totalCost').textContent = course.totalCost;
+        document.getElementById('costBreakdown').textContent = course.costBreakdown;
+        document.getElementById('transitList').innerHTML = (course.transit || [])
+          .map(function (line, i) {
+            return (
+              '<li class="transit-item">' +
+              '<span class="transit-num mono-tabular">0' + (i + 1) + '</span>' +
+              '<span>' + escapeHtml(line) + '</span>' +
+              '</li>'
+            );
+          })
+          .join('');
+
+        // 08. 추천 이유
+        document.getElementById('overallReason').textContent = course.overallReason;
+      }
+
+      function runSearch(scrollToResult) {
+        const inputEl = document.getElementById('regionInput');
+        const region = inputEl.value.trim();
+        if (!region) return;
+
+        state.region = region;
+        state.extra = document.getElementById('extraInput').value.trim();
+
+        document.querySelectorAll('.quick-btn').forEach(function (btn) {
+          btn.classList.toggle('active', btn.getAttribute('data-region') === region);
+        });
+
+        const matchedKey = matchCuratedRegion(region);
+        const courseData = matchedKey
+          ? CURATED_COURSES[matchedKey]
+          : buildCustomRegionCourse(region);
+
+        renderCourse(courseData, region);
+
+        if (scrollToResult) {
+          document.getElementById('course-result').scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      }
+
+      function buildStandaloneIndexHtml() {
+        const headClone = document.head.cloneNode(true);
+        headClone
+          .querySelectorAll('script[src*="@vite"], script[src*="vite"], link[href*="@vite"], style[data-vite-dev-id]')
+          .forEach(function (el) {
+            el.remove();
+          });
+
+        return (
+          '<!DOCTYPE html>\n' +
+          '<html lang="ko">\n' +
+          '<head>\n' +
+          headClone.innerHTML.trim() +
+          '\n</head>\n' +
+          '<body>\n' +
+          INITIAL_BODY_HTML.trim() +
+          '\n</body>\n</html>\n'
+        );
+      }
+
+      function triggerBlobDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () {
+          URL.revokeObjectURL(url);
+        }, 1000);
+      }
+
+      function showExportStatus(message) {
+        const box = document.getElementById('exportStatus');
+        box.innerHTML = message;
+        box.classList.remove('hidden');
+      }
+
+      async function downloadGithubZip() {
+        const topBtn = document.getElementById('topZipBtn');
+        const mainBtn = document.getElementById('mainZipBtn');
+        const htmlContent = buildStandaloneIndexHtml();
+
+        if (typeof window.JSZip === 'undefined') {
+          triggerBlobDownload(
+            new Blob([htmlContent], { type: 'text/html;charset=utf-8' }),
+            'index.html'
+          );
+          showExportStatus(
+            '오프라인 환경으로 확인되어 JSZip CDN 대신 단일 <strong>index.html</strong> 파일을 바로 저장했습니다.'
+          );
+          return;
+        }
+
+        topBtn.disabled = true;
+        mainBtn.disabled = true;
+        topBtn.textContent = '압축 생성 중...';
+        mainBtn.textContent = 'ZIP 생성 중...';
+
+        try {
+          const zip = new window.JSZip();
+          const folder = zip.folder('date-mate');
+          folder.file('index.html', htmlContent);
+          folder.file('README.md', README_CONTENT);
+
+          const blob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+          });
+
+          triggerBlobDownload(blob, 'date-mate-github.zip');
+          showExportStatus(
+            '<strong>date-mate-github.zip</strong> 다운로드가 시작되었습니다. 압축을 풀면 프레임워크나 package.json 없이 <code>index.html</code>과 <code>README.md</code>만 들어 있습니다.'
+          );
+          topBtn.textContent = '다운로드 완료';
+          mainBtn.textContent = 'date-mate-github.zip 다시 받기';
+          setTimeout(function () {
+            topBtn.textContent = 'GitHub .zip 다운로드';
+          }, 3000);
+        } catch (err) {
+          showExportStatus(
+            'ZIP 생성 중 오류가 발생했습니다: ' + escapeHtml(err.message || '알 수 없는 오류')
+          );
+          topBtn.textContent = 'GitHub .zip 다운로드';
+          mainBtn.textContent = 'date-mate-github.zip 다운로드';
+        } finally {
+          topBtn.disabled = false;
+          mainBtn.disabled = false;
+        }
+      }
+
+      function downloadSingleHtml() {
+        const htmlContent = buildStandaloneIndexHtml();
+        triggerBlobDownload(
+          new Blob([htmlContent], { type: 'text/html;charset=utf-8' }),
+          'index.html'
+        );
+        showExportStatus(
+          '<strong>index.html</strong> 단일 파일을 내려받았습니다. 파일을 더블 클릭해 로컬 브라우저에서 바로 실행하거나 GitHub에 올릴 수 있습니다.'
+        );
+      }
+
+      // 이벤트 바인딩
+      document.getElementById('plannerForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        runSearch(true);
+      });
+
+      document.querySelectorAll('.quick-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.getElementById('regionInput').value = btn.getAttribute('data-region');
+          runSearch(true);
+        });
+      });
+
+      document.querySelectorAll('.filter-group').forEach(function (group) {
+        const filterKey = group.getAttribute('data-filter-group');
+        group.querySelectorAll('.filter-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            state[filterKey] = btn.getAttribute('data-value');
+            group.querySelectorAll('.filter-btn').forEach(function (el) {
+              el.classList.remove('active');
+            });
+            btn.classList.add('active');
+            runSearch(false);
+          });
+        });
+      });
+
+      document.getElementById('topZipBtn').addEventListener('click', downloadGithubZip);
+      document.getElementById('mainZipBtn').addEventListener('click', downloadGithubZip);
+      document.getElementById('footerZipBtn').addEventListener('click', downloadGithubZip);
+      document.getElementById('rawHtmlBtn').addEventListener('click', downloadSingleHtml);
+
+      document.getElementById('copyGitBtn').addEventListener('click', async function () {
+        const btn = document.getElementById('copyGitBtn');
+        const text = document.getElementById('gitCommandPre').textContent;
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.textContent = '복사 완료';
+          setTimeout(function () {
+            btn.textContent = '명령어 복사';
+          }, 2000);
+        } catch (e) {
+          btn.textContent = '직접 선택해 복사하세요';
+        }
+      });
+
+      // 초기 목포 코스 렌더링
+      runSearch(false);
+    })();
+  </script>
+</body>
+</html>
